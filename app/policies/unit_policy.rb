@@ -15,8 +15,9 @@ class UnitPolicy < ApplicationPolicy
     user&.member?
   end
 
-  def alerts?
-    user&.has_permission_on_unit?("awarding_add", record)
+  def missing_awards?
+    user&.has_permission_on_unit?("awarding_add", record) ||
+      user&.has_permission?("admin")
   end
 
   def stats?

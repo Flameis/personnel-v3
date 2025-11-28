@@ -10,10 +10,10 @@ class Enlistment < ApplicationRecord
   belongs_to :country, optional: true
   belongs_to :unit, optional: true
 
-  enum status: {pending: "Pending", accepted: "Accepted", denied: "Denied",
+  enum :status, {pending: "Pending", accepted: "Accepted", denied: "Denied",
                 withdrawn: "Withdrawn", awol: "AWOL"}
-  enum timezone: {est: "EST", gmt: "GMT", pst: "PST", any_timezone: "Any", no_timezone: "None"}
-  enum game: {dh: "DH", rs: "RS", arma3: "Arma 3", rs2: "RS2", squad: "Squad"}
+  enum :timezone, {est: "EST", gmt: "GMT", pst: "PST", any_timezone: "Any", no_timezone: "None"}
+  enum :game, {dh: "DH", rs: "RS", arma3: "Arma 3", rs2: "RS2", squad: "Squad"}
   VALID_AGES = ["Under 13", *13..99].map(&:to_s)
 
   normalizes :ingame_name, :recruiter, :comments, with: ->(attribute) { attribute.strip }
@@ -43,6 +43,29 @@ class Enlistment < ApplicationRecord
   before_validation :set_legacy_attributes_from_user
 
   scope :with_recruiter_details, -> { includes(recruiter_user: [:rank, active_assignments: :unit]) }
+
+  scope :with_recruit_result, -> {
+    select("enlistments.*")
+      .select(
+        'CASE
+        WHEN EXISTS (
+          SELECT 1 FROM promotions
+          JOIN ranks ON promotions.new_rank_id = ranks.id
+          WHERE promotions.member_id = enlistments.member_id
+          AND ranks.order > 2 -- Greater than Private
+          AND promotions.date > enlistments.date
+        ) THEN "Promoted"
+        WHEN EXISTS (
+          SELECT 1 FROM assignments
+          JOIN units ON assignments.unit_id = units.id
+          WHERE assignments.member_id = enlistments.member_id
+          AND units.classification = "Combat"
+          AND assignments.start_date > enlistments.date
+        ) THEN "Graduated"
+        ELSE "Accepted"
+       END AS result'
+      )
+  }
 
   def linked_ban_logs
     ips = linked_forum_users.pluck(:ips).flatten.uniq

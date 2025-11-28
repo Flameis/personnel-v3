@@ -1,5 +1,7 @@
 class User < ApplicationRecord
   include FriendlyId
+  include ServiceCoatUploader::Attachment(:service_coat)
+
   self.table_name = "members"
   self.ignored_columns = %w[status primary_assignment_id im_type im_handle city]
   audited max_audits: 10
@@ -11,9 +13,20 @@ class User < ApplicationRecord
       .merge(where("assignments.end_date > ?", Date.today).or(where(end_date: nil)))
   }, class_name: "Assignment", foreign_key: "member_id"
 
+  has_many :non_training_assignments, -> {
+    joins(:unit).where.not(units: {classification: "Training"})
+  }, class_name: "Assignment", foreign_key: "member_id"
+
+  has_many :user_awards, foreign_key: "member_id"
   has_many :awards, through: :user_awards
   has_many :demerits, foreign_key: "member_id"
   has_many :discharges, foreign_key: "member_id"
+  has_many :non_honorable_discharges, -> { non_honorable },
+    class_name: "Discharge", foreign_key: "member_id"
+  has_one :latest_non_honorable_discharge, -> {
+    non_honorable.order(date: :desc).limit(1)
+  }, class_name: "Discharge", foreign_key: "member_id"
+
   has_many :enlistments, foreign_key: "member_id", inverse_of: :user
   has_many :extended_loas, foreign_key: "member_id"
   has_many :finance_records, foreign_key: "member_id"
@@ -21,17 +34,28 @@ class User < ApplicationRecord
   has_many :passes, inverse_of: :user, foreign_key: "member_id"
   has_many :promotions, foreign_key: "member_id"
   has_many :units, through: :assignments
-  has_many :user_awards, foreign_key: "member_id"
   has_many :ait_qualifications, foreign_key: "member_id"
   has_many :ait_standards, through: :ait_qualifications
   has_many :attendance_records, foreign_key: "member_id"
   has_many :recruited_enlistments, class_name: "Enlistment",
     foreign_key: "recruiter_member_id", inverse_of: :recruiter_user
+  has_many :accepted_recruited_enlistments, -> { accepted },
+    class_name: "Enlistment", foreign_key: "recruiter_member_id"
   belongs_to :rank
   belongs_to :country, optional: true
 
   scope :active, ->(date = Date.current) {
     joins(:assignments).merge(Assignment.active(date)).distinct
+  }
+
+  scope :honorably_discharged, -> {
+    where.not(id: Assignment.active.select(:member_id))
+      .joins(:discharges)
+      .where(
+        "discharges.date = (SELECT MAX(d2.date) FROM discharges d2 WHERE d2.member_id = members.id)"
+      )
+      .where(discharges: {type: "Honorable"})
+      .distinct
   }
 
   attr_accessor :username
@@ -187,12 +211,17 @@ class User < ApplicationRecord
       .uniq
   end
 
+  # Calculate service duration
+  # To avoid N+1 queries, ensure non_training_assignments and latest_non_honorable_discharge are preloaded
   def service_duration
-    relevant_assignments = assignments.not_training
+    # Don't include training assignments in service duration
+    relevant_assignments = non_training_assignments
 
-    last_non_honorable_discharge = discharges.not_honorable.last
-    if last_non_honorable_discharge.present?
-      relevant_assignments = relevant_assignments.since(last_non_honorable_discharge.date)
+    # Filter assignments since last non-honorable discharge if applicable
+    if latest_non_honorable_discharge.present?
+      # Filter in memory instead of using the since scope to avoid N+1 queries
+      discharge_date = latest_non_honorable_discharge.date
+      relevant_assignments = relevant_assignments.select { |a| a.start_date >= discharge_date }
     end
 
     days_of_service = relevant_assignments
@@ -209,37 +238,12 @@ class User < ApplicationRecord
     @attendance_stats ||= AttendanceStats.for_user(self)
   end
 
-  def update_coat
-    PersonnelV2Service.new.update_coat(id)
-  end
-
   def forum_member_username
     @forum_member_username ||= discourse_service.user.username if forum_member_id.present?
   end
 
   def forum_member_email
     @forum_member_email ||= discourse_service.user.email if forum_member_id.present?
-  end
-
-  def vanilla_forum_member_username
-    @vanilla_forum_member_username ||= vanilla_service.user.username if vanilla_forum_member_id.present?
-  end
-
-  def update_forum_display_name
-    discourse_service.user.update_display_name(short_name) if forum_member_id.present?
-    vanilla_service.user.update_display_name(short_name) if vanilla_forum_member_id.present?
-  end
-
-  def update_forum_roles
-    if forum_member_id.present?
-      expected_roles = forum_role_ids(:discourse)
-      discourse_service.user.update_roles(expected_roles)
-    end
-
-    if vanilla_forum_member_id.present?
-      expected_roles = forum_role_ids(:vanilla)
-      vanilla_service.user.update_roles(expected_roles)
-    end
   end
 
   def create_forum_topic(...) = discourse_service.user.create_topic(...)
@@ -252,7 +256,7 @@ class User < ApplicationRecord
         linked_forum_users.concat(discourse_users)
       end
       if vanilla_forum_member_id
-        vanilla_users = vanilla_service.user.linked_users
+        vanilla_users = [{user_id: vanilla_forum_member_id, forum: :vanilla, username: nil, ips: []}]
         linked_forum_users.concat(vanilla_users)
       end
       linked_forum_users
@@ -294,10 +298,6 @@ class User < ApplicationRecord
 
   def discourse_service
     @discourse_service ||= DiscourseService.new(forum_member_id)
-  end
-
-  def vanilla_service
-    @vanilla_service ||= VanillaService.new(vanilla_forum_member_id)
   end
 
   def slug_candidates

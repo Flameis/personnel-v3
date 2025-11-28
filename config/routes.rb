@@ -1,4 +1,8 @@
 Rails.application.routes.draw do
+  # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
+  # Can be used by load balancers and uptime monitors to verify that the app is live.
+  get "up" => "rails/health#show", :as => :rails_health_check
+
   # root-to-www redirect
   if Rails.env.production?
     match "(*any)",
@@ -61,6 +65,11 @@ Rails.application.routes.draw do
 
   resources :units, only: [:show] do
     get "attendance", to: "units#attendance"
+    get "awols", to: "units#awols"
+    get "missing-awards", to: "units#missing_awards"
+    get "stats", to: "units#stats"
+    get "discharges", to: "units#discharges"
+    get "recruits", to: "units#recruits"
   end
 
   resources :passes, only: [:index, :show]
@@ -73,6 +82,10 @@ Rails.application.routes.draw do
   end
 
   resources :enlistments, only: [:show, :new, :create]
+
+  constraints PermissionConstraint.new("admin") do
+    mount MaintenanceTasks::Engine, at: "/maintenance_tasks"
+  end
 
   # reverse proxy legacy routes
   with_options controller: "reverse_proxy", via: :all, constraints: {path: /.*/} do

@@ -1,57 +1,58 @@
 require "test_helper"
 
-class Manage::DischargesControllerTest < ActionDispatch::IntegrationTest
-  setup do
-    @user_unit = create(:unit)
-    create(:permission, :leader, abbr: "manage", unit: @user_unit)
-    create(:permission, :leader, abbr: "discharge_add", unit: @user_unit)
+module Manage
+  class DischargesControllerTest < ActionDispatch::IntegrationTest
+    include ActiveJob::TestHelper
 
-    @user = create(:user)
-    create(:assignment, :leader, user: @user, unit: @user_unit)
+    setup do
+      @user_unit = create(:unit)
+      create(:permission, :leader, abbr: "manage", unit: @user_unit)
+      create(:permission, :leader, abbr: "discharge_add", unit: @user_unit)
 
-    @subject = create(:user)
-  end
+      @user = create(:user)
+      create(:assignment, :leader, user: @user, unit: @user_unit)
 
-  test "should end assignments and update forum roles after creation" do
-    sign_in_as @user
-    unit = create(:unit, parent: @user_unit)
-    create(:assignment, user: @subject, unit: unit)
-    discharge = build(:discharge, user: @subject)
+      @subject = create(:user)
+      clear_enqueued_jobs
+    end
 
-    methods_called = []
-    User.stub_any_instance(:update_forum_roles, -> { methods_called << :update_forum_roles }) do
-      post manage_discharges_url, params: {
-        discharge: {
-          **discharge_attributes(discharge),
-          end_assignments: true
+    test "should end assignments and update forum roles after creation" do
+      sign_in_as @user
+      unit = create(:unit, parent: @user_unit)
+      create(:assignment, user: @subject, unit: unit)
+      discharge = build(:discharge, user: @subject)
+
+      assert_enqueued_with(job: UpdateDiscourseRolesJob, args: [@subject]) do
+        post manage_discharges_url, params: {
+          discharge: {
+            **discharge_attributes(discharge),
+            end_assignments: true
+          }
         }
-      }
+      end
+
+      refute @subject.member?, "user is still a member"
     end
 
-    refute @subject.member?, "user is still a member"
-    assert_includes methods_called, :update_forum_roles
-  end
+    test "should not end assignments or update forum roles if end_assignments wasn't ticked" do
+      sign_in_as @user
+      unit = create(:unit, parent: @user_unit)
+      create(:assignment, user: @subject, unit: unit)
+      discharge = build(:discharge, user: @subject, end_assignments: false)
 
-  test "should not end assignments or update forum roles if end_assignments wasn't ticked" do
-    sign_in_as @user
-    unit = create(:unit, parent: @user_unit)
-    create(:assignment, user: @subject, unit: unit)
-    discharge = build(:discharge, user: @subject, end_assignments: false)
+      assert_no_enqueued_jobs only: UpdateDiscourseRolesJob do
+        post manage_discharges_url, params: {discharge: discharge_attributes(discharge)}
+      end
 
-    methods_called = []
-    User.stub_any_instance(:update_forum_roles, -> { methods_called << :update_forum_roles }) do
-      post manage_discharges_url, params: {discharge: discharge_attributes(discharge)}
+      assert @subject.member?, "user is no longer a member"
     end
 
-    assert @subject.member?, "user is no longer a member"
-    refute_includes methods_called, :update_forum_roles
-  end
+    private
 
-  private
-
-  def discharge_attributes(discharge)
-    discharge.attributes
-      .symbolize_keys
-      .slice(:member_id, :date, :type, :reason, :forum_id, :topic_id)
+    def discharge_attributes(discharge)
+      discharge.attributes
+        .symbolize_keys
+        .slice(:member_id, :date, :type, :reason, :forum_id, :topic_id)
+    end
   end
 end

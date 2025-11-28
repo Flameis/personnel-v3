@@ -8,20 +8,15 @@ discourse:
   sso_secret: dev
   categories:
     enlistment_office: 4
-personnel_v2_app:
+service_coat_generator:
   base_url:
-    internal: http://app
-    external: https://personnel.29th.local
-personnel_v2_api:
-  base_url:
-    internal: http://api
-    external: https://api.29th.local
-  api_key: dev
+    internal: https://service-coat-generator-v82di.ondigitalocean.app
+    external: https://service-coat-generator-v82di.ondigitalocean.app
+  api_key: ~
 vanilla:
   base_url:
     internal: https://forums
     external: https://vanilla.29th.local
-  api_key: dev
 smf:
   base_url:
     internal: https://smf

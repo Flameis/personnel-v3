@@ -1,2 +1,2 @@
 web: bundle exec rails server -p $PORT
-worker: bundle exec rails jobs:work
+worker: rake delayed:work

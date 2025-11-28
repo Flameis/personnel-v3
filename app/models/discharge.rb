@@ -6,7 +6,7 @@ class Discharge < ApplicationRecord
 
   belongs_to :user, foreign_key: "member_id"
 
-  enum type: {honorable: "Honorable",
+  enum :type, {honorable: "Honorable",
               general: "General",
               dishonorable: "Dishonorable"}
 
@@ -19,6 +19,16 @@ class Discharge < ApplicationRecord
   validates_date :date
   validates :type, presence: true
   validates :reason, presence: true
+
+  scope :non_honorable, -> { where.not(type: "Honorable") }
+
+  scope :for_unit, ->(unit) {
+    joins(user: :assignments)
+      .where(assignments: {unit_id: unit})
+      .where("assignments.end_date = discharges.date")
+  }
+
+  scope :desc, -> { order(date: :desc) }
 
   def type_abbr
     {"honorable" => "HD",

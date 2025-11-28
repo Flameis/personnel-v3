@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Forms::GraduationTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   setup do
     @tp = create(:unit, classification: :training)
 
@@ -22,10 +24,7 @@ class Forms::GraduationTest < ActiveSupport::TestCase
     @rank = create(:rank)
     @position = create(:position, name: "Rifleman")
 
-    user_delay_proxy = mock("delay_proxy")
-    User.any_instance.stubs(:delay).returns(user_delay_proxy)
-    @user_stubs = user_delay_proxy.stubs(update_forum_display_name: true,
-      update_forum_roles: true, update_coat: true)
+    clear_enqueued_jobs
   end
 
   test "save rolls back if unit updates fail" do
@@ -101,9 +100,13 @@ class Forms::GraduationTest < ActiveSupport::TestCase
       award_ids: @awards.pluck(:id), rank_id: @rank.id, position_id: @position.id,
       topic_id: 0)
 
-    @user_stubs.times(@cadets.size)
-
-    assert graduation.save
+    assert_enqueued_jobs @cadets.size, only: UpdateDiscourseDisplayNameJob do
+      assert_enqueued_jobs @cadets.size, only: UpdateDiscourseRolesJob do
+        assert_enqueued_jobs @cadets.size, only: GenerateServiceCoatJob do
+          assert graduation.save
+        end
+      end
+    end
   end
 
   test "does not allow graduating a user who is not part of the training platoon" do

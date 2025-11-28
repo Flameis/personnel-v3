@@ -10,7 +10,7 @@ Bundler.require(*Rails.groups)
 module Personnel
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
-    config.load_defaults 7.0
+    config.load_defaults 7.2
 
     # Please, add to the `ignore` list any other `lib` subdirectories that do
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
@@ -27,8 +27,6 @@ module Personnel
 
     config.homepage = config_for(:homepage)
     config.siblings = config_for(:siblings)
-
-    config.active_job.queue_adapter = :delayed_job
 
     config.time_zone = "Eastern Time (US & Canada)"
     config.beginning_of_week = :sunday

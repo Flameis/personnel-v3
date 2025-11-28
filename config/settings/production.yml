@@ -8,20 +8,15 @@ discourse:
   sso_secret: ~
   categories:
     enlistment_office: 37
-personnel_v2_app:
+service_coat_generator:
   base_url:
-    internal: https://personnel.29th.org
-    external: https://personnel.29th.org
-personnel_v2_api:
-  base_url:
-    internal: https://api.29th.org
-    external: https://api.29th.org
+    internal: https://service-coat-generator-v82di.ondigitalocean.app
+    external: https://service-coat-generator-v82di.ondigitalocean.app
   api_key: ~
 vanilla:
   base_url:
     internal: https://vanilla.29th.org
     external: https://vanilla.29th.org
-  api_key: ~
 smf:
   base_url:
     internal: https://smf.29th.org

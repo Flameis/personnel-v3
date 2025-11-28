@@ -5,6 +5,7 @@
 
   .unit-profile-header__title {
     margin-bottom: 5px;
+
     h1 {
       font-size: clamp(20px, 40px, 2vw);
       display: inline;
@@ -25,10 +26,54 @@
 
   .unit-attendance__absent-col {
     text-align: right;
-    
+
     .awol {
       color: lighten($danger, 8%);
       font-weight: bold;
+    }
+  }
+}
+
+table.unit-stats {
+  table-layout: fixed; // Fixed layout for consistent column alignment
+  width: 100%;
+
+  caption {
+    caption-side: top;
+  }
+
+  td {
+    vertical-align: middle;
+  }
+
+  // Explicitly set width for name column
+  th:first-child,
+  td:first-child {
+    width: 200px; // Fixed width for name + position
+  }
+
+  .unit-stats__attendance-col {
+    width: 36px; // Minimum width for "100%"
+    text-align: center;
+    font-weight: bold;
+  }
+
+  .unit-stats__basic-progress-col {
+    width: 40px; // Just wide enough for 32px images + padding
+    text-align: center;
+
+    .inline-award {
+      max-width: 32px;
+    }
+  }
+
+  .unit-stats__weapon-progress-col {
+    width: 72px; // 16px image + space for " + XX%"
+    text-align: center;
+    white-space: nowrap; // Prevent wrapping within columns
+
+    .inline-badge {
+      max-width: 16px;
     }
   }
 }

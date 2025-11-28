@@ -2,6 +2,7 @@ ActiveAdmin.register Enlistment do
   belongs_to :user, optional: true, finder: :find_by_slug
   includes user: :rank, liaison: :rank
   includes :unit
+  includes recruiter_user: :rank
   actions :index, :show, :edit, :update
   permit_params do
     params = [
@@ -34,6 +35,7 @@ ActiveAdmin.register Enlistment do
   filter :user_last_name_cont, label: "Last name"
   filter :game, as: :select, collection: Enlistment.games.map(&:reverse)
   filter :timezone, as: :select, collection: Enlistment.timezones.map(&:reverse)
+  filter :recruiter_user, as: :searchable_select, ajax: true, label: "Recruiter"
 
   index do
     selectable_column
@@ -48,6 +50,7 @@ ActiveAdmin.register Enlistment do
       Enlistment.timezones[enlistment.timezone]
     end
     column :liaison
+    column :recruiter_user, label: "Recruiter"
     actions
   end
 
@@ -139,9 +142,7 @@ ActiveAdmin.register Enlistment do
               end
               if enlistment.user.vanilla_forum_member_id
                 row "Vanilla User" do |user|
-                  link_to user.vanilla_forum_member_username, vanilla_url(user: user)
-                rescue Faraday::Error => err
-                  error_tag(err)
+                  user.vanilla_forum_member_id
                 end
               end
             end
@@ -288,7 +289,7 @@ ActiveAdmin.register Enlistment do
       if enlistment.status == "accepted"
         enlistment.destroy_assignments
         enlistment.create_assignment!
-        enlistment.user.update_forum_display_name
+        UpdateDiscourseDisplayNameJob.perform_later(enlistment.user)
       elsif enlistment.status == "awol"
         enlistment.end_assignments
       else
@@ -297,7 +298,7 @@ ActiveAdmin.register Enlistment do
     elsif (enlistment.user.saved_change_to_last_name? ||
         enlistment.user.saved_change_to_name_prefix?) &&
         enlistment.status == "accepted"
-      enlistment.user.update_forum_display_name
+      UpdateDiscourseDisplayNameJob.perform_later(enlistment.user)
     end
   end
 end
